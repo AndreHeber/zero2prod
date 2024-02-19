@@ -3,26 +3,32 @@ use secrecy::{ExposeSecret, Secret};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
-    pub database: DatabaseSettings,
-    pub application_port: u16,
+	pub database: DatabaseSettings,
+	pub application: ApplicationSettings,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ApplicationSettings {
+	pub port: u16,
+	pub host: String,
 }
 
 #[derive(serde::Deserialize)]
 pub struct DatabaseSettings {
-    pub username: String,
-    pub password: Secret<String>,
-    pub port: u16,
-    pub host: String,
-    pub database_name: String,
+	pub username: String,
+	pub password: Secret<String>,
+	pub port: u16,
+	pub host: String,
+	pub database_name: String,
 }
 
 impl DatabaseSettings {
-    pub fn connection_string(&self) -> Secret<String> {
-        Secret::new(format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password.expose_secret(), self.host, self.port, self.database_name
-        ))
-    }
+	pub fn connection_string(&self) -> Secret<String> {
+		Secret::new(format!(
+			"postgres://{}:{}@{}:{}/{}",
+			self.username, self.password.expose_secret(), self.host, self.port, self.database_name
+		))
+	}
 
 	pub fn connection_string_without_db(&self) -> Secret<String> {
 		Secret::new(format!(
@@ -33,9 +39,45 @@ impl DatabaseSettings {
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
-    let settings = Config::builder()
-        .add_source(config::File::with_name("configuration"))
-        .build()?;
+	let run_mode = std::env::var("APP_ENVIRONMENT").unwrap_or("development".into());
+	let base_path = std::env::current_dir().expect("Failed to determine the current directory");
+	let configuration_directory = base_path.join("configuration"); // "./configuration"
 
-    settings.try_deserialize()
+	let base_config_file = configuration_directory.join("base"); // "./configuration/base"
+	let base_config_file = base_config_file.to_str().expect("Invalid base config file path");
+	let environment_config_file = configuration_directory.join(run_mode.to_lowercase()); // "./configuration/[development/production]"
+	let environment_config_file = environment_config_file.to_str().expect("Invalid environment config file path");
+
+	let settings = Config::builder()
+		.add_source(config::File::with_name(base_config_file).required(true))
+		.add_source(config::File::with_name(environment_config_file).required(true))
+		.build()?;
+
+	settings.try_deserialize()
+}
+
+pub enum Environment {
+	Development,
+	Production,
+}
+
+impl Environment {
+	pub fn as_str(&self) -> &'static str {
+		match self {
+			Environment::Development => "development",
+			Environment::Production => "production",
+		}
+	}
+}
+
+impl TryFrom<String> for Environment {
+	type Error = String;
+
+	fn try_from(s: String) -> Result<Self, Self::Error> {
+		match s.to_lowercase().as_str() {
+			"development" => Ok(Environment::Development),
+			"production" => Ok(Environment::Production),
+			_ => Err(format!("{} is not a valid environment", s)),
+		}
+	}
 }
