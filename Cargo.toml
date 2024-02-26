@@ -16,7 +16,7 @@ name = "zero2prod"
 [dependencies]
 actix-web = "4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-reqwest = "0.11"
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 config = "0.14"
 uuid = { version = "1.7.0", features = ["v4"] }
@@ -31,12 +31,17 @@ tracing-actix-web = "0.7"
 unicode-segmentation = "1"
 claim = "0.5"
 validator = "0.16"
+lettre = "0.11"
 
 [dev-dependencies]
 fake = "2.9"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
 rand = "0.8"
+wiremock = "0.6"
+serde_json = "1"
+testcontainers = "0.15.0"
+testcontainers-modules = { version = "0.3.4", features = ["postgres"] }
 
 [dependencies.sqlx]
 version = "0.7.3"

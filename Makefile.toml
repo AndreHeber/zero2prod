@@ -1,0 +1,25 @@
+[tasks.format]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt", "--", "--emit=files"]
+
+[tasks.lint]
+install_crate = "rust-clippy"
+command = "cargo"
+args = ["clippy"]
+
+[tasks.fmtclip]
+dependencies = [
+    "format",
+    "lint"
+]
+
+[tasks.machete]
+install_crate = "cargo-machete"
+command = "cargo"
+args = ["machete"]
+
+[tasks.audit]
+install_crate = "cargo-audit"
+command = "cargo"
+args = ["audit"]

@@ -1,8 +1,10 @@
 use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use sqlx::{postgres::PgPoolOptions, query, Connection, Executor, PgConnection, Pool, Postgres};
+use testcontainers::{clients::Cli, RunnableImage};
 use uuid::Uuid;
 use std:: net::TcpListener;
-use zero2prod::{configuration::{get_configuration, DatabaseSettings}, telemetry::{get_subscriber, init_subscriber}};
+use zero2prod::{configuration::{get_configuration, DatabaseSettings}, email_client, telemetry::{get_subscriber, init_subscriber}};
 
 pub struct TestApp {
 	pub address: String,
@@ -22,6 +24,13 @@ static TRACING: Lazy<()> = Lazy::new(|| {
 	}
 });
 
+fn create_db(config: &DatabaseSettings) -> RunnableImage<testcontainers_modules::postgres::Postgres> {
+	RunnableImage::from(testcontainers_modules::postgres::Postgres::default())
+		.with_env_var(("POSTGRES_PASSWORD", config.password.expose_secret()))
+		.with_env_var(("POSTGRES_USER", &config.username))
+		.with_env_var(("POSTGRES_DB", &config.database_name))
+}
+
 async fn spawn_app() -> TestApp {
 	Lazy::force(&TRACING);
 
@@ -30,10 +39,22 @@ async fn spawn_app() -> TestApp {
     let address = format!("http://127.0.0.1:{}", port);
 
 	let mut config = get_configuration().expect("Failed to read configuration");
+	let image = create_db(&config.database);
+	let docker = Cli::default();
+	docker.run(image);
 	config.database.database_name = Uuid::new_v4().to_string();
 	let connection_pool = configure_database(&config.database).await;
 
-    let server = zero2prod::startup::run(listener, connection_pool.clone()).expect("Failed to bind address");
+	let sender_email = config.email_client.sender().unwrap();
+	let timeout = config.email_client.timeout();
+	let email_client = email_client::EmailClient::new(
+		config.email_client.base_url,
+		sender_email,
+		config.email_client.authorization_token,
+		timeout,
+	);
+
+    let server = zero2prod::startup::run(listener, connection_pool.clone(), email_client).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
 	TestApp {
@@ -85,7 +106,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     let app = spawn_app().await;
     let client = reqwest::Client::new();
 
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = "name=andre&email=andre.heber@gmx.net";
     let response = client
         .post(&format!("{}/subscriptions", &app.address))
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -101,8 +122,8 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 		.await
 		.expect("Failed to fetch saved subscription.");
 
-	assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-	assert_eq!(saved.name, "le guin");
+	assert_eq!(saved.email, "andre.heber@gmx.net");
+	assert_eq!(saved.name, "andre");
 }
 
 #[tokio::test]
