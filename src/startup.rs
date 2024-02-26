@@ -48,8 +48,8 @@ impl Application {
 			timeout,
 		);
 	
-		let port = config.application.port;
-		let listener = TcpListener::bind(format!("{}:{}", config.application.host, port))?;
+		let listener = TcpListener::bind(format!("{}:{}", config.application.host, config.application.port))?;
+		let port = listener.local_addr().unwrap().port();
 		let server = run(listener, connection_pool, email_client)?;
 		Ok(Self { port, server })
 	}

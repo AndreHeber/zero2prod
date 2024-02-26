@@ -42,6 +42,7 @@ wiremock = "0.6"
 serde_json = "1"
 testcontainers = "0.15.0"
 testcontainers-modules = { version = "0.3.4", features = ["postgres"] }
+linkify = "0.10.0"
 
 [dependencies.sqlx]
 version = "0.7.3"
