@@ -35,7 +35,7 @@ impl EmailClient {
 		text_content: &str,
 	) -> Result<(), reqwest::Error> {
 		let url = format!("{}/email", self.base_url);
-		let builder = self
+		let _builder = self
 			.http_client
 			.post(&url)
 			.header("X-Postmark-Server-Token", self.authorization_token.expose_secret())
