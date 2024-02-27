@@ -4,14 +4,21 @@ use uuid::Uuid;
 use wiremock::MockServer;
 use zero2prod::{configuration::{get_configuration, DatabaseSettings}, startup::{get_connection_pool, Application}, telemetry::{get_subscriber, init_subscriber}};
 
+pub struct ConfirmationLinks {
+	pub html: String,
+	pub plain_text: String,
+}
+
 pub struct TestApp {
 	pub address: String,
 	pub connection_pool: Pool<Postgres>,
 	pub email_server: MockServer,
+	pub port: u16,
 }
 
 impl TestApp {
 	pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+		println!("Post Address: {}", &self.address);
 		reqwest::Client::new()
 			.post(&format!("{}/subscriptions", &self.address))
 			.header("Content-Type", "application/x-www-form-urlencoded")
@@ -19,6 +26,24 @@ impl TestApp {
 			.send()
 			.await
 			.expect("Failed to execute request.")
+	}
+
+	pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
+		let body: serde_json::Value = serde_json::from_slice(&email_request.body).unwrap();
+
+		let get_link = |s: &str| {
+			let links: Vec<_> = linkify::LinkFinder::new()
+				.links(s)
+				.filter(|l| *l.kind() == linkify::LinkKind::Url)
+				.collect();
+			assert_eq!(links.len(), 1);
+			links[0].as_str().to_owned()
+		};
+
+		let html = get_link(body["HtmlBody"].as_str().unwrap());
+		let plain_text = get_link(body["TextBody"].as_str().unwrap());
+
+		ConfirmationLinks { html, plain_text }
 	}
 }
 
@@ -50,14 +75,16 @@ pub async fn spawn_app() -> TestApp {
 	configure_database(&config.database).await;
 
 	let app = Application::build(config.clone()).await.expect("Failed to build app.");
-	println!("App built at port: {}", app.port());
+	let port = app.port();
 	let address = format!("http://127.0.0.1:{}", app.port());
+	println!("App Address: {}", address);
 	let _fut = tokio::spawn(app.run_until_stopped());
 
 	TestApp {
 		address,
 		connection_pool: get_connection_pool(config.database),
 		email_server,
+		port,
 	}
 }
 
