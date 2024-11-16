@@ -119,3 +119,34 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
 	// The two links should be identical
 	assert_eq!(confirmation_links.html, confirmation_links.plain_text);
 }
+
+#[tokio::test]
+async fn subscribe_fails_if_there_is_a_fatal_database_error() {
+	let app = spawn_app().await;
+	let body = "name=Andre%20Heber&email=andre.heber%40gmx.net";
+
+	// Mock::given(path("/email"))
+	// 	.and(method(Method::POST))
+	// 	.respond_with(ResponseTemplate::new(200))
+	// 	.expect(1)
+	// 	.mount(&app.email_server)
+	// 	.await;
+
+	// // Let's cause a database error
+	// let (subscribers, pool) = app.get_subscribers().await;
+	sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;",)
+		.execute(&app.connection_pool)
+		.await
+		.expect("Failed to drop the subscriptions table");
+
+	let response = app.post_subscriptions(body.to_string()).await;
+	assert_eq!(response.status().as_u16(), 500);
+
+	// Bring the table back for other tests
+	// sqlx::query(include_str!("../../../migrations/redo_subscriptions_table.sql"))
+	// 	.execute(&pool)
+	// 	.await
+	// 	.expect("Failed to re-create the subscriptions table");
+
+	// drop(subscribers);
+}
